@@ -187,18 +187,16 @@ class Client:
         except ValueError:
             return False
 
-    def list_posts(self, *, count: int = 20, cursor: int = 0) -> dict:
+    def list_posts(self, *, count: int = 20, cursor: int = 0, detailed: bool = False) -> dict:
         """Return recent posts for the authenticated account.
 
-        The TikTok web profile endpoints are browser-driven and vary by account, but the common
-        unauthed/semiauthed request to list a user's published videos is the post item list API.
+        A minimal, backward-compatible result includes the common fields used by the CLI and MCP
+        (`id`, `title`, `url`, `thumbnail`, `created_at`). Passing ``detailed=True`` adds richer
+        metadata such as caption, visibility, stats and pagination state.
         """
         if count <= 0:
             raise ValidationError("count must be positive")
         with self._session() as s:
-            # Resolve the current authenticated user's secUid from their profile page, then fetch
-            # their recent posts. This mirrors the browser flow used by the web app and avoids
-            # requiring a separate OAuth or public profile lookup.
             profile = self._request(
                 s,
                 "GET",
@@ -230,20 +228,53 @@ class Client:
             raise UploadError("list posts: TikTok returned a non-JSON response", status=r.status_code,
                               body=r.text[:500]) from None
         items = data.get("itemList") or data.get("items") or []
+
+        def normalize(item: dict) -> dict:
+            stats = item.get("stats") or item.get("statistics") or {}
+            likes = stats.get("diggCount") if isinstance(stats, dict) else None
+            comments = stats.get("commentCount") if isinstance(stats, dict) else None
+            shares = stats.get("shareCount") if isinstance(stats, dict) else None
+            visibility = item.get("privacySetting") or item.get("visibility")
+            caption = item.get("desc") or item.get("title") or item.get("text") or ""
+            # Backward-compatible fields first: existing callers already expect these names.
+            out = {
+                "id": item.get("id") or item.get("item_id") or item.get("video_id"),
+                "title": caption,
+                "caption": caption,
+                "url": item.get("shareUrl") or item.get("webVideoUrl") or item.get("playUrl") or None,
+                "video_url": item.get("playUrl") or item.get("webVideoUrl") or item.get("shareUrl") or None,
+                "thumbnail": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
+                "cover_url": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
+                "created_at": item.get("createTime") or item.get("create_time") or None,
+                "created_at_iso": item.get("createTime") or item.get("create_time") or None,
+                "visibility": visibility,
+                "likes": likes,
+                "comments": comments,
+                "shares": shares,
+                "scheduled": bool(item.get("scheduled") or item.get("isScheduled") or item.get("schedule_time")),
+            }
+            if not detailed:
+                return out
+            out.update({
+                "status": item.get("status") or ("scheduled" if out["scheduled"] else "published"),
+                "author": item.get("author") or None,
+                "duration": item.get("duration") or item.get("video_duration") or None,
+                "play_count": item.get("playCount") or item.get("play_count") or None,
+                "stats": stats,
+                "raw": item,
+            })
+            return out
+
+        next_cursor = data.get("cursor") or data.get("nextCursor") or 0
+        has_more = bool(data.get("hasMore") if "hasMore" in data else data.get("has_more") or False)
+        posts = [normalize(item) for item in items]
         return {
             "account": self.account.name,
-            "count": len(items),
-            "cursor": data.get("cursor", 0),
-            "posts": [
-                {
-                    "id": item.get("id") or item.get("item_id") or item.get("video_id"),
-                    "title": item.get("desc") or item.get("text") or "",
-                    "url": item.get("shareUrl") or item.get("webVideoUrl") or item.get("playUrl") or None,
-                    "thumbnail": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
-                    "created_at": item.get("createTime") or item.get("create_time") or None,
-                }
-                for item in items
-            ],
+            "count": len(posts),
+            "cursor": cursor,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+            "posts": posts,
         }
 
     # -- upload ----------------------------------------------------------------

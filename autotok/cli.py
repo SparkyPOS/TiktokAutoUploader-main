@@ -70,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("-v", "--videos", action="store_true", help="list videos in your videos folder")
     sp.add_argument("-p", "--posts", action="store_true", help="list recent posts for a saved account")
     sp.add_argument("-n", "--name", help="saved account name when listing posts")
+    sp.add_argument("--count", type=int, default=20, help="how many recent posts to fetch (default 20)")
+    sp.add_argument("--cursor", type=int, default=0, help="cursor offset for paginating older posts")
+    sp.add_argument("--detailed", action="store_true", help="include richer post metadata")
 
     ap = sub.add_parser("accounts", help="manage saved accounts")
     asub = ap.add_subparsers(dest="action", metavar="<action>", required=True)
@@ -218,11 +221,27 @@ def cmd_show(args, store: AccountStore) -> int:
         if not args.name:
             print("Use -n/--name to pick the saved TikTok account whose posts to list.", file=sys.stderr)
             return 2
-        posts = Client.from_account(args.name, store=store).list_posts()
+        posts = Client.from_account(args.name, store=store).list_posts(count=args.count, cursor=args.cursor,
+                                                                        detailed=args.detailed)
         print(f"Posts for '{args.name}':" if posts["posts"] else f"No recent posts for '{args.name}'.")
         for post in posts["posts"]:
             title = (post["title"] or "")[:80]
-            print(f"  {post['id']}  {title}")
+            prefix = f"{post['id']}  {title}"
+            if args.detailed:
+                details = []
+                if post.get("visibility") is not None:
+                    details.append(f"visibility={post['visibility']}")
+                if post.get("likes") is not None:
+                    details.append(f"likes={post['likes']}")
+                if post.get("comments") is not None:
+                    details.append(f"comments={post['comments']}")
+                if post.get("shares") is not None:
+                    details.append(f"shares={post['shares']}")
+                if details:
+                    prefix = f"{prefix}  ({'; '.join(details)})"
+            print(f"  {prefix}")
+        if posts.get("has_more"):
+            print(f"More posts available: use --cursor {posts.get('next_cursor')} to fetch the next page.")
     return 0
 
 
