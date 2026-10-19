@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 import autotok
 from api.db import init_db
-from api.routers import accounts, login, proxy, schedules, uploads, videos
+from api.routers import accounts, login, posts, proxy, schedules, uploads, videos
 from api.security import allowed_hosts, hostname
 from autotok import settings
 
@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(accounts.router)
+    app.include_router(posts.router)
     app.include_router(videos.router)
     app.include_router(uploads.router)
     app.include_router(schedules.router)
