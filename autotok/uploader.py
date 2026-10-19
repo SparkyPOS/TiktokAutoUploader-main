@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import string
 import time
@@ -185,6 +186,65 @@ class Client:
             return r.status_code == 200 and "video_token_v5" in r.json()
         except ValueError:
             return False
+
+    def list_posts(self, *, count: int = 20, cursor: int = 0) -> dict:
+        """Return recent posts for the authenticated account.
+
+        The TikTok web profile endpoints are browser-driven and vary by account, but the common
+        unauthed/semiauthed request to list a user's published videos is the post item list API.
+        """
+        if count <= 0:
+            raise ValidationError("count must be positive")
+        with self._session() as s:
+            # Resolve the current authenticated user's secUid from their profile page, then fetch
+            # their recent posts. This mirrors the browser flow used by the web app and avoids
+            # requiring a separate OAuth or public profile lookup.
+            profile = self._request(
+                s,
+                "GET",
+                "https://www.tiktok.com/@me",
+                "current user profile",
+                expect_ok=False,
+                timeout=30.0,
+            )
+            sec_uid = None
+            if profile.status_code == 200:
+                match = re.search(r'"secUid":"([^"]+)"', profile.text)
+                if match:
+                    sec_uid = match.group(1)
+            if not sec_uid:
+                raise NotLoggedInError("could not resolve the current user's TikTok profile; log in again")
+            r = self._request(
+                s,
+                "GET",
+                f"https://www.tiktok.com/api/post/item_list/?secUid={sec_uid}&count={count}&cursor={cursor}",
+                "list posts",
+                expect_ok=False,
+                timeout=30.0,
+            )
+        if r.status_code != 200:
+            raise UploadError("list posts: TikTok rejected the request", status=r.status_code, body=r.text[:500])
+        try:
+            data = r.json()
+        except ValueError:
+            raise UploadError("list posts: TikTok returned a non-JSON response", status=r.status_code,
+                              body=r.text[:500]) from None
+        items = data.get("itemList") or data.get("items") or []
+        return {
+            "account": self.account.name,
+            "count": len(items),
+            "cursor": data.get("cursor", 0),
+            "posts": [
+                {
+                    "id": item.get("id") or item.get("item_id") or item.get("video_id"),
+                    "title": item.get("desc") or item.get("text") or "",
+                    "url": item.get("shareUrl") or item.get("webVideoUrl") or item.get("playUrl") or None,
+                    "thumbnail": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
+                    "created_at": item.get("createTime") or item.get("create_time") or None,
+                }
+                for item in items
+            ],
+        }
 
     # -- upload ----------------------------------------------------------------
 

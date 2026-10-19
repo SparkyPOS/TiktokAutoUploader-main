@@ -46,8 +46,8 @@ def uploads(monkeypatch):
 async def test_lists_tools_with_annotations():
     async with Client(create_server()) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}
-    assert set(tools) == {"list_accounts", "check_account", "list_videos", "upload_video", "login",
-                          "login_status", "set_proxy", "test_proxy"}
+    assert set(tools) == {"list_accounts", "check_account", "list_videos", "list_posts", "upload_video",
+                          "login", "login_status", "set_proxy", "test_proxy"}
     assert tools["list_accounts"].annotations.read_only_hint is True
     upload = tools["upload_video"].annotations
     assert upload.read_only_hint is False and upload.idempotent_hint is False and upload.open_world_hint is True
@@ -65,6 +65,32 @@ async def test_list_videos(video_file):
     error, data = await call("list_videos")
     assert not error
     assert [v["name"] for v in data["videos"]] == ["clip.mp4"]
+
+
+async def test_list_posts(saved_account, monkeypatch):
+    calls = []
+
+    class FakeResp:
+        def __init__(self, status, text, json_data):
+            self.status_code = status
+            self.text = text
+            self._json_data = json_data
+
+        def json(self):
+            return self._json_data
+
+    def fake_request(self, session, method, url, what, expect_ok=True, timeout=None, **kwargs):
+        calls.append((method, url))
+        if url.endswith("@me"):
+            return FakeResp(200, '{"user":{"secUid":"s-123"}}', {})
+        return FakeResp(200, "{}", {"itemList": [{"id": "v1", "desc": "hello", "shareUrl": "https://tiktok.com/@me/video/1"}]})
+
+    monkeypatch.setattr("autotok.uploader.Client._request", fake_request)
+    error, data = await call("list_posts", {"account": "alice", "count": 1})
+    assert not error
+    assert data["account"] == "alice"
+    assert data["posts"][0]["id"] == "v1"
+    assert calls[0][1].endswith("@me")
 
 
 async def test_upload_now(saved_account, video_file, uploads):
