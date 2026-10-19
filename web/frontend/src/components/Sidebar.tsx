@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Users, Upload, Calendar, Film, LogIn } from "lucide-react";
+import { Users, Upload, Calendar, Film, LogIn, Newspaper } from "lucide-react";
 import clsx from "clsx";
 
 const items = [
@@ -7,6 +7,7 @@ const items = [
   { to: "/upload", label: "Upload", icon: Upload },
   { to: "/schedules", label: "Schedules", icon: Calendar },
   { to: "/videos", label: "Videos", icon: Film },
+  { to: "/posts", label: "Posts", icon: Newspaper },
   { to: "/login", label: "Browser login", icon: LogIn },
 ];
 

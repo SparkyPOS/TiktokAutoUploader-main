@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import string
 import time
@@ -185,6 +186,96 @@ class Client:
             return r.status_code == 200 and "video_token_v5" in r.json()
         except ValueError:
             return False
+
+    def list_posts(self, *, count: int = 20, cursor: int = 0, detailed: bool = False) -> dict:
+        """Return recent posts for the authenticated account.
+
+        A minimal, backward-compatible result includes the common fields used by the CLI and MCP
+        (`id`, `title`, `url`, `thumbnail`, `created_at`). Passing ``detailed=True`` adds richer
+        metadata such as caption, visibility, stats and pagination state.
+        """
+        if count <= 0:
+            raise ValidationError("count must be positive")
+        with self._session() as s:
+            profile = self._request(
+                s,
+                "GET",
+                "https://www.tiktok.com/@me",
+                "current user profile",
+                expect_ok=False,
+                timeout=30.0,
+            )
+            sec_uid = None
+            if profile.status_code == 200:
+                match = re.search(r'"secUid":"([^"]+)"', profile.text)
+                if match:
+                    sec_uid = match.group(1)
+            if not sec_uid:
+                raise NotLoggedInError("could not resolve the current user's TikTok profile; log in again")
+            r = self._request(
+                s,
+                "GET",
+                f"https://www.tiktok.com/api/post/item_list/?secUid={sec_uid}&count={count}&cursor={cursor}",
+                "list posts",
+                expect_ok=False,
+                timeout=30.0,
+            )
+        if r.status_code != 200:
+            raise UploadError("list posts: TikTok rejected the request", status=r.status_code, body=r.text[:500])
+        try:
+            data = r.json()
+        except ValueError:
+            raise UploadError("list posts: TikTok returned a non-JSON response", status=r.status_code,
+                              body=r.text[:500]) from None
+        items = data.get("itemList") or data.get("items") or []
+
+        def normalize(item: dict) -> dict:
+            stats = item.get("stats") or item.get("statistics") or {}
+            likes = stats.get("diggCount") if isinstance(stats, dict) else None
+            comments = stats.get("commentCount") if isinstance(stats, dict) else None
+            shares = stats.get("shareCount") if isinstance(stats, dict) else None
+            visibility = item.get("privacySetting") or item.get("visibility")
+            caption = item.get("desc") or item.get("title") or item.get("text") or ""
+            # Backward-compatible fields first: existing callers already expect these names.
+            out = {
+                "id": item.get("id") or item.get("item_id") or item.get("video_id"),
+                "title": caption,
+                "caption": caption,
+                "url": item.get("shareUrl") or item.get("webVideoUrl") or item.get("playUrl") or None,
+                "video_url": item.get("playUrl") or item.get("webVideoUrl") or item.get("shareUrl") or None,
+                "thumbnail": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
+                "cover_url": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
+                "created_at": item.get("createTime") or item.get("create_time") or None,
+                "created_at_iso": item.get("createTime") or item.get("create_time") or None,
+                "visibility": visibility,
+                "likes": likes,
+                "comments": comments,
+                "shares": shares,
+                "scheduled": bool(item.get("scheduled") or item.get("isScheduled") or item.get("schedule_time")),
+            }
+            if not detailed:
+                return out
+            out.update({
+                "status": item.get("status") or ("scheduled" if out["scheduled"] else "published"),
+                "author": item.get("author") or None,
+                "duration": item.get("duration") or item.get("video_duration") or None,
+                "play_count": item.get("playCount") or item.get("play_count") or None,
+                "stats": stats,
+                "raw": item,
+            })
+            return out
+
+        next_cursor = data.get("cursor") or data.get("nextCursor") or 0
+        has_more = bool(data.get("hasMore") if "hasMore" in data else data.get("has_more") or False)
+        posts = [normalize(item) for item in items]
+        return {
+            "account": self.account.name,
+            "count": len(posts),
+            "cursor": cursor,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+            "posts": posts,
+        }
 
     # -- upload ----------------------------------------------------------------
 

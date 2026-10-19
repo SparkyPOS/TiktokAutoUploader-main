@@ -240,6 +240,17 @@ def create_server(store: Optional[AccountStore] = None, *,
                               for p in sorted(d.iterdir()) if p.is_file())
         return {"videos_dir": str(settings.videos_dir()), "videos": videos}
 
+    @server.tool(annotations=READ_ONLY_REMOTE)
+    @_tool_errors
+    def list_posts(account: AccountName, count: int = 20, cursor: int = 0,
+                  detailed: bool = False) -> dict:
+        """List recent posts for a saved TikTok account.
+
+        Returns the most recent posts and their metadata from the authenticated account's TikTok profile.
+        Use ``detailed=True`` for richer fields such as visibility, stats and scheduling state.
+        """
+        return Client.from_account(account, store=store).list_posts(count=count, cursor=cursor, detailed=detailed)
+
     @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False,
                                              idempotent_hint=False, open_world_hint=True))
     @_tool_errors

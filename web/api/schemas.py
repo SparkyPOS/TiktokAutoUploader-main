@@ -227,6 +227,33 @@ class VideoFileInfo(BaseModel):
     modified_at: datetime
 
 
+class PostInfo(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    url: Optional[str] = None
+    video_url: Optional[str] = None
+    thumbnail: Optional[str] = None
+    cover_url: Optional[str] = None
+    created_at: Optional[int | str] = None
+    visibility: Optional[str | int] = None
+    likes: Optional[int] = None
+    comments: Optional[int] = None
+    shares: Optional[int] = None
+    scheduled: bool = False
+    status: Optional[str] = None
+    duration: Optional[int] = None
+
+
+class PostListResponse(BaseModel):
+    account: str
+    count: int
+    cursor: int
+    next_cursor: int
+    has_more: bool
+    posts: list[PostInfo]
+
+
 # ---------- login (noVNC) ----------------------------------------------------
 
 class LoginBrowserStartRequest(BaseModel):

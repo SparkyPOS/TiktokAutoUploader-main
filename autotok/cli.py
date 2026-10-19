@@ -65,9 +65,14 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("-bo", "--brandorganic", type=int, default=0, help=argparse.SUPPRESS)
     up.add_argument("-bc", "--brandcontent", type=int, default=0, help=argparse.SUPPRESS)
 
-    sp = sub.add_parser("show", help="list saved accounts or videos")
+    sp = sub.add_parser("show", help="list saved accounts, videos or current posts")
     sp.add_argument("-u", "--users", action="store_true", help="list saved accounts")
     sp.add_argument("-v", "--videos", action="store_true", help="list videos in your videos folder")
+    sp.add_argument("-p", "--posts", action="store_true", help="list recent posts for a saved account")
+    sp.add_argument("-n", "--name", help="saved account name when listing posts")
+    sp.add_argument("--count", type=int, default=20, help="how many recent posts to fetch (default 20)")
+    sp.add_argument("--cursor", type=int, default=0, help="cursor offset for paginating older posts")
+    sp.add_argument("--detailed", action="store_true", help="include richer post metadata")
 
     ap = sub.add_parser("accounts", help="manage saved accounts")
     asub = ap.add_subparsers(dest="action", metavar="<action>", required=True)
@@ -194,9 +199,10 @@ def cmd_upload(args, store: AccountStore) -> int:
 
 def cmd_show(args, store: AccountStore) -> int:
     from . import settings
+    from .uploader import Client
 
-    if not args.users and not args.videos:
-        print("Use -u to list accounts or -v to list videos.")
+    if not any((args.users, args.videos, args.posts)):
+        print("Use -u to list accounts, -v to list videos, or -p to list posts for an account.")
         return 1
     if args.users:
         names = store.list()
@@ -211,6 +217,31 @@ def cmd_show(args, store: AccountStore) -> int:
         print("Videos:" if files else f"No videos in {settings.videos_dir()}")
         for p in files:
             print(f"  {p.name}  ({p.parent})")
+    if args.posts:
+        if not args.name:
+            print("Use -n/--name to pick the saved TikTok account whose posts to list.", file=sys.stderr)
+            return 2
+        posts = Client.from_account(args.name, store=store).list_posts(count=args.count, cursor=args.cursor,
+                                                                        detailed=args.detailed)
+        print(f"Posts for '{args.name}':" if posts["posts"] else f"No recent posts for '{args.name}'.")
+        for post in posts["posts"]:
+            title = (post["title"] or "")[:80]
+            prefix = f"{post['id']}  {title}"
+            if args.detailed:
+                details = []
+                if post.get("visibility") is not None:
+                    details.append(f"visibility={post['visibility']}")
+                if post.get("likes") is not None:
+                    details.append(f"likes={post['likes']}")
+                if post.get("comments") is not None:
+                    details.append(f"comments={post['comments']}")
+                if post.get("shares") is not None:
+                    details.append(f"shares={post['shares']}")
+                if details:
+                    prefix = f"{prefix}  ({'; '.join(details)})"
+            print(f"  {prefix}")
+        if posts.get("has_more"):
+            print(f"More posts available: use --cursor {posts.get('next_cursor')} to fetch the next page.")
     return 0
 
 

@@ -98,6 +98,19 @@ def test_show_lists_accounts_and_videos(saved_account, video_file, capsys):
     assert "alice" in out and "clip.mp4" in out
 
 
+def test_show_lists_posts_for_account(saved_account, monkeypatch, capsys):
+    monkeypatch.setattr("autotok.uploader.Client.list_posts", lambda self, *, count=20, cursor=0, detailed=False: {
+        "account": self.account.name,
+        "count": 1,
+        "cursor": 0,
+        "next_cursor": 0,
+        "has_more": False,
+        "posts": [{"id": "v123", "title": "hello", "url": "https://example.com"}],
+    })
+    assert run("show", "-p", "-n", "alice") == 0
+    assert "v123" in capsys.readouterr().out
+
+
 def test_python_dash_m_entry_point():
     import subprocess
     import sys
