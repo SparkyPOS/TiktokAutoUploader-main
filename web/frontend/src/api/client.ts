@@ -55,6 +55,33 @@ export interface UploadResult {
   video_id: string | null;
 }
 
+export interface Post {
+  id?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  url?: string | null;
+  video_url?: string | null;
+  thumbnail?: string | null;
+  cover_url?: string | null;
+  created_at?: number | string | null;
+  visibility?: string | number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  scheduled?: boolean;
+  status?: string | null;
+  duration?: number | null;
+}
+
+export interface PostListResponse {
+  account: string;
+  count: number;
+  cursor: number;
+  next_cursor: number;
+  has_more: boolean;
+  posts: Post[];
+}
+
 export interface ProxyTestResult {
   ok: boolean;
   proxy: string | null;
@@ -124,6 +151,11 @@ export const Uploads = {
     api.post<UploadResult>("/uploads/youtube", payload).then(r => r.data),
   library: (payload: unknown) =>
     api.post<UploadResult>("/uploads/library", payload).then(r => r.data),
+};
+
+export const Posts = {
+  list: (accountId: number, params?: { count?: number; cursor?: number; detailed?: boolean }) =>
+    api.get<PostListResponse>(`/posts/${accountId}`, { params }).then(r => r.data),
 };
 
 export const Login = {

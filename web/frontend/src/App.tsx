@@ -5,6 +5,7 @@ import UploadPage from "./pages/Upload";
 import SchedulesPage from "./pages/Schedules";
 import LoginPage from "./pages/Login";
 import VideosPage from "./pages/Videos";
+import PostsPage from "./pages/Posts";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/login/:sessionId" element={<LoginPage />} />
           <Route path="/videos" element={<VideosPage />} />
+          <Route path="/posts" element={<PostsPage />} />
         </Routes>
       </main>
     </div>
