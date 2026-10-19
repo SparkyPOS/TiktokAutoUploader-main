@@ -1,0 +1,112 @@
+# Production-ready local-first compose.
+#
+# Services:
+#   tiktok-base — helper service that only exists to build the shared base
+#                 image that api, scheduler, and novnc all derive from. They
+#                 reference it through `additional_contexts`, so Compose
+#                 always builds it first.
+#   api         — FastAPI REST API + OpenAPI docs at /docs (port 8000)
+#   scheduler   — polling worker for scheduled uploads
+#   novnc       — virtual browser for TikTok login (stateless; the API saves accounts)
+#   webapp      — React UI served by nginx, proxies /api and /novnc (port 3000)
+#
+# Ports are bound to 127.0.0.1 so nothing is exposed outside the host.
+# Only the webapp and API ports are bound — scheduler and noVNC control port
+# stay on the internal compose network.
+
+services:
+  tiktok-base:
+    image: tiktok-base:latest
+    build:
+      context: .
+      dockerfile: web/base.Dockerfile
+    command: ["true"]  # never runs; exists to build the image
+
+  api:
+    image: tiktok-api:latest
+    build:
+      context: .
+      dockerfile: web/api/Dockerfile
+      additional_contexts:
+        base: service:tiktok-base
+    depends_on:
+      - tiktok-base
+    environment:
+      - TIKTOK_API_DB_PATH=/data/tiktok.db
+      - AUTOTOK_HOME=/data/autotok
+      - AUTOTOK_VIDEOS_DIR=/data/VideosDirPath
+      - NOVNC_CONTROL_URL=http://novnc:7900
+      - NOVNC_PUBLIC_URL=/novnc/vnc.html
+      - API_PUBLIC_URL=http://api:8000
+      # Extra host names the web app is reached by, e.g. behind your own reverse proxy.
+      - AUTOTOK_ALLOWED_HOSTS=${AUTOTOK_ALLOWED_HOSTS:-}
+      # Optional cloud browser for signing uploads (README: Cloud browsers). Set in .env.
+      - AUTOTOK_BROWSER=${AUTOTOK_BROWSER:-local}
+      - BROWSERBASE_API_KEY=${BROWSERBASE_API_KEY:-}
+      - BROWSERBASE_PROJECT_ID=${BROWSERBASE_PROJECT_ID:-}
+      - STEEL_API_KEY=${STEEL_API_KEY:-}
+      - STEEL_BASE_URL=${STEEL_BASE_URL:-}
+    volumes:
+      - ./data:/data
+    # cwd on the volume so 1.x session files in data/CookiesDir are migrated.
+    working_dir: /data
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  scheduler:
+    image: tiktok-scheduler:latest
+    build:
+      context: .
+      dockerfile: web/scheduler/Dockerfile
+      additional_contexts:
+        base: service:tiktok-base
+    depends_on:
+      - tiktok-base
+      - api
+    environment:
+      - TIKTOK_API_DB_PATH=/data/tiktok.db
+      - AUTOTOK_HOME=/data/autotok
+      - AUTOTOK_VIDEOS_DIR=/data/VideosDirPath
+      - SCHEDULER_POLL_SECONDS=30
+      - SCHEDULER_CONCURRENCY=1
+      # Optional cloud browser for signing uploads (README: Cloud browsers). Set in .env.
+      - AUTOTOK_BROWSER=${AUTOTOK_BROWSER:-local}
+      - BROWSERBASE_API_KEY=${BROWSERBASE_API_KEY:-}
+      - BROWSERBASE_PROJECT_ID=${BROWSERBASE_PROJECT_ID:-}
+      - STEEL_API_KEY=${STEEL_API_KEY:-}
+      - STEEL_BASE_URL=${STEEL_BASE_URL:-}
+    volumes:
+      - ./data:/data
+    working_dir: /data
+    restart: unless-stopped
+
+  novnc:
+    image: tiktok-novnc:latest
+    build:
+      context: .
+      dockerfile: web/novnc/Dockerfile
+      additional_contexts:
+        base: service:tiktok-base
+    depends_on:
+      - tiktok-base
+    tmpfs:
+      # Mitigates Chromium OOM on TikTok's heavy login page.
+      - /dev/shm:size=512m
+    # noVNC ports stay internal — webapp nginx proxies them.
+    expose:
+      - "6080"
+      - "7900"
+    restart: unless-stopped
+
+  webapp:
+    image: tiktok-webapp:latest
+    build:
+      context: .
+      dockerfile: web/frontend/Dockerfile
+    depends_on:
+      - api
+      - novnc
+    ports:
+      - "127.0.0.1:3000:80"
+    restart: unless-stopped
