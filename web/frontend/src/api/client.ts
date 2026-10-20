@@ -55,6 +55,15 @@ export interface UploadResult {
   video_id: string | null;
 }
 
+export interface CommentInfo {
+  id?: string | null;
+  text?: string | null;
+  user?: string | null;
+  created_at?: number | string | null;
+  created_at_iso?: number | string | null;
+  likes?: number | null;
+}
+
 export interface Post {
   id?: string | null;
   title?: string | null;
@@ -65,10 +74,12 @@ export interface Post {
   thumbnail?: string | null;
   cover_url?: string | null;
   created_at?: number | string | null;
+  created_at_iso?: number | string | null;
   visibility?: string | number | null;
   likes?: number | null;
   comments?: number | null;
   comment_count?: number | null;
+  comments_list?: CommentInfo[];
   shares?: number | null;
   scheduled?: boolean;
   status?: string | null;

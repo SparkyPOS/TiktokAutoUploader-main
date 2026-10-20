@@ -96,6 +96,13 @@ export default function PostsPage() {
                 {query.data.posts.map(post => {
                   const description = post.description || post.caption || post.title || "No description";
                   const commentCount = post.comment_count ?? post.comments ?? undefined;
+                  const commentList = post.comments_list ?? [];
+                  const formatTimestamp = (value: number | string | null | undefined) => {
+                    if (value === null || value === undefined || value === "") return "Unknown time";
+                    const ms = Number(value) * 1000;
+                    const date = Number.isFinite(ms) && ms > 0 ? new Date(ms) : new Date(String(value));
+                    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+                  };
                   return (
                     <article key={String(post.id ?? `${post.title ?? "post"}-${post.created_at}`)} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                       {post.video_url ? (
@@ -118,7 +125,7 @@ export default function PostsPage() {
                       )}
                       <div className="p-4 space-y-3">
                         <div className="text-xs text-slate-500">
-                          {post.created_at ? new Date(Number(post.created_at) * 1000 || String(post.created_at)).toLocaleString() : "Unknown date"}
+                          {formatTimestamp(post.created_at)}
                         </div>
                         <h3 className="font-medium text-base line-clamp-2">{post.title || description}</h3>
 
@@ -146,6 +153,22 @@ export default function PostsPage() {
                             )}
                           </div>
                         )}
+
+                        {commentList.length > 0 && (
+                          <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5">
+                            <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-2">Comments</div>
+                            <div className="space-y-2">
+                              {commentList.map((comment, index) => (
+                                <div key={`${post.id ?? "post"}-comment-${comment.id ?? index}`} className="rounded bg-white p-2">
+                                  <div className="text-[10px] text-slate-500 mb-1">{formatTimestamp(comment.created_at)}</div>
+                                  <div className="text-sm text-slate-700 whitespace-pre-wrap break-words">{comment.text || "(empty comment)"}</div>
+                                  {comment.user && <div className="text-[10px] text-slate-500 mt-1">By {comment.user}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {post.url && (
                           <a href={post.url} target="_blank" rel="noreferrer" className="inline-block text-sm text-brand-600 underline">
                             Open post
