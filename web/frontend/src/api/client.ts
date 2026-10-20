@@ -55,18 +55,31 @@ export interface UploadResult {
   video_id: string | null;
 }
 
+export interface CommentInfo {
+  id?: string | null;
+  text?: string | null;
+  user?: string | null;
+  created_at?: number | string | null;
+  created_at_iso?: number | string | null;
+  likes?: number | null;
+}
+
 export interface Post {
   id?: string | null;
   title?: string | null;
   caption?: string | null;
+  description?: string | null;
   url?: string | null;
   video_url?: string | null;
   thumbnail?: string | null;
   cover_url?: string | null;
   created_at?: number | string | null;
+  created_at_iso?: number | string | null;
   visibility?: string | number | null;
   likes?: number | null;
   comments?: number | null;
+  comment_count?: number | null;
+  comments_list?: CommentInfo[];
   shares?: number | null;
   scheduled?: boolean;
   status?: string | null;
@@ -156,6 +169,31 @@ export const Uploads = {
 export const Posts = {
   list: (accountId: number, params?: { count?: number; cursor?: number; detailed?: boolean }) =>
     api.get<PostListResponse>(`/posts/${accountId}`, { params }).then(r => r.data),
+  listMany: async (accountId: number, params?: { count?: number; detailed?: boolean }, maxPages = 5) => {
+    const pageSize = Math.max(1, Math.min(100, params?.count ?? 20));
+    const out: PostListResponse = {
+      account: "",
+      count: 0,
+      cursor: 0,
+      next_cursor: 0,
+      has_more: false,
+      posts: [],
+    };
+    let cursor = 0;
+    let pages = 0;
+    while (pages < maxPages) {
+      const page = await Posts.list(accountId, { count: pageSize, cursor, detailed: params?.detailed ?? false });
+      out.account = page.account || out.account;
+      out.count += page.posts.length;
+      out.next_cursor = page.next_cursor;
+      out.has_more = page.has_more;
+      out.posts.push(...page.posts);
+      if (!page.has_more || page.next_cursor === undefined || page.next_cursor === null || page.next_cursor === cursor) break;
+      cursor = page.next_cursor;
+      pages += 1;
+    }
+    return out;
+  },
 };
 
 export const Login = {

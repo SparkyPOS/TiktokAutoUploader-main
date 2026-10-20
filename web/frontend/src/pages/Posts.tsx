@@ -1,4 +1,40 @@
 import { useMemo, useState } from "react";
+import { type PostListResponse } from "../api/client";
+
+function CommentPanel({ post, commentList, formatTimestamp }: {
+  post: any;
+  commentList: any[];
+  formatTimestamp: (value: number | string | null | undefined) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Comments</span>
+        <span className="text-xs text-slate-500">{open ? "Hide" : `Show (${commentList.length})`}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {commentList.length === 0 ? (
+            <div className="text-xs text-slate-500">No comments returned by TikTok for this post.</div>
+          ) : (
+            commentList.map((comment, index) => (
+              <div key={`${post.id ?? "post"}-comment-${comment.id ?? index}`} className="rounded bg-white p-2">
+                <div className="text-[10px] text-slate-500 mb-1">{formatTimestamp(comment.created_at)}</div>
+                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words">{comment.text || "(empty comment)"}</div>
+                {comment.user && <div className="text-[10px] text-slate-500 mt-1">By {comment.user}</div>}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 import { useQuery } from "@tanstack/react-query";
 import { Accounts, Posts, errorMessage } from "../api/client";
 
@@ -11,6 +47,7 @@ export default function PostsPage() {
   const [count, setCount] = useState(20);
   const [cursor, setCursor] = useState(0);
   const [detailed, setDetailed] = useState(false);
+  const [loadedPages, setLoadedPages] = useState(0);
 
   const selectedAccount = useMemo(
     () => accounts.find(a => a.id === selectedId) ?? accounts[0] ?? null,
@@ -18,9 +55,23 @@ export default function PostsPage() {
   );
 
   const query = useQuery({
-    queryKey: ["posts", selectedAccount?.id, count, cursor, detailed],
+    queryKey: ["posts", selectedAccount?.id, count, cursor, detailed, loadedPages],
     enabled: !!selectedAccount,
-    queryFn: () => Posts.list(selectedAccount!.id, { count, cursor, detailed }),
+    queryFn: async () => {
+      const page = await Posts.list(selectedAccount!.id, { count, cursor, detailed });
+      const extras: PostListResponse[] = [];
+      let nextCursor = page.next_cursor;
+      let pagesLoaded = 0;
+      while (pagesLoaded < Math.max(0, loadedPages) && page.has_more && nextCursor !== undefined && nextCursor !== null && nextCursor !== cursor) {
+        const nextPage = await Posts.list(selectedAccount!.id, { count, cursor: nextCursor, detailed });
+        extras.push(nextPage);
+        nextCursor = nextPage.next_cursor;
+        pagesLoaded += 1;
+        if (!nextPage.has_more || nextPage.next_cursor === undefined || nextPage.next_cursor === null || nextPage.next_cursor === nextCursor) break;
+      }
+      const mergedPosts = [ ...page.posts, ...extras.flatMap(p => p.posts) ];
+      return { ...page, posts: mergedPosts.slice(0, count * (loadedPages + 1)) };
+    },
     retry: false,
   });
 
@@ -73,7 +124,10 @@ export default function PostsPage() {
               <input type="checkbox" checked={detailed} onChange={e => setDetailed(e.target.checked)} />
               Detailed
             </label>
-            <button className="btn-primary" onClick={() => setCursor(0)}>
+            <button className="btn-primary" onClick={() => {
+              setCursor(0);
+              setLoadedPages(0);
+            }}>
               Refresh
             </button>
           </div>
@@ -85,6 +139,7 @@ export default function PostsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>{query.data.posts.length} posts</span>
+                <span>Page {Math.min(loadedPages + 1, 5)} / 5</span>
                 {query.data.has_more && <span>More posts available</span>}
               </div>
 
@@ -93,53 +148,90 @@ export default function PostsPage() {
               )}
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {query.data.posts.map(post => (
-                  <article key={String(post.id ?? `${post.title ?? "post"}-${post.created_at}`)} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-                    {post.cover_url || post.thumbnail ? (
-                      <img
-                        src={post.cover_url || post.thumbnail || undefined}
-                        alt={post.caption || post.title || "Post thumbnail"}
-                        className="h-48 w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-48 w-full bg-slate-100 flex items-center justify-center text-slate-400">
-                        No image
-                      </div>
-                    )}
-                    <div className="p-4 space-y-2">
-                      <div className="text-xs text-slate-500">
-                        {post.created_at ? new Date(Number(post.created_at) * 1000 || String(post.created_at)).toLocaleString() : "Unknown date"}
-                      </div>
-                      <h3 className="font-medium line-clamp-2">{post.title || post.caption || "Untitled post"}</h3>
-                      {post.caption && post.caption !== post.title && (
-                        <p className="text-sm text-slate-600 line-clamp-3">{post.caption}</p>
-                      )}
-                      {detailed && (
-                        <div className="text-xs text-slate-500 space-y-1">
-                          {post.visibility !== undefined && <div>Visibility: {String(post.visibility)}</div>}
-                          {post.likes !== undefined && <div>Likes: {post.likes}</div>}
-                          {post.comments !== undefined && <div>Comments: {post.comments}</div>}
-                          {post.shares !== undefined && <div>Shares: {post.shares}</div>}
-                          {post.status && <div>Status: {post.status}</div>}
+                {query.data.posts.map(post => {
+                  const description = post.description || post.caption || post.title || "No description";
+                  const commentCount = post.comment_count ?? post.comments ?? undefined;
+                  const commentList = post.comments_list ?? [];
+                  const formatTimestamp = (value: number | string | null | undefined) => {
+                    if (value === null || value === undefined || value === "") return "Unknown time";
+                    const ms = Number(value) * 1000;
+                    const date = Number.isFinite(ms) && ms > 0 ? new Date(ms) : new Date(String(value));
+                    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+                  };
+                  return (
+                    <article key={String(post.id ?? `${post.title ?? "post"}-${post.created_at}`)} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                      {post.video_url ? (
+                        <video
+                          src={post.video_url}
+                          controls
+                          preload="metadata"
+                          className="h-48 w-full object-cover bg-slate-100"
+                        />
+                      ) : post.cover_url || post.thumbnail ? (
+                        <img
+                          src={post.cover_url || post.thumbnail || undefined}
+                          alt={description}
+                          className="h-48 w-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-48 w-full bg-slate-100 flex items-center justify-center text-slate-400">
+                          No video or image
                         </div>
                       )}
-                      {post.url && (
-                        <a href={post.url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 underline">
-                          Open post
-                        </a>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                      <div className="p-4 space-y-3">
+                        <div className="text-xs text-slate-500">
+                          {formatTimestamp(post.created_at)}
+                        </div>
+                        <h3 className="font-medium text-base line-clamp-2">{post.title || description}</h3>
+
+                        <div className="rounded-md bg-slate-50 p-2.5">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">Caption</div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{description}</p>
+                        </div>
+
+                        {(detailed || commentCount !== undefined || post.likes !== undefined || post.shares !== undefined || post.visibility !== undefined) && (
+                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                            {post.likes !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Likes: {post.likes}</div>
+                            )}
+                            {commentCount !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Comments: {commentCount}</div>
+                            )}
+                            {post.shares !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Shares: {post.shares}</div>
+                            )}
+                            {post.visibility !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Visibility: {String(post.visibility)}</div>
+                            )}
+                            {post.status && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5 col-span-2">Status: {post.status}</div>
+                            )}
+                          </div>
+                        )}
+
+                        {commentList.length > 0 && (
+                          <CommentPanel post={post} commentList={commentList} formatTimestamp={formatTimestamp} />
+                        )}
+
+                        {post.url && (
+                          <a href={post.url} target="_blank" rel="noreferrer" className="inline-block text-sm text-brand-600 underline">
+                            Open post
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
 
               {query.data.has_more && (
                 <div className="flex justify-end">
                   <button
                     className="btn-secondary"
-                    onClick={() => setCursor(query.data.next_cursor)}
+                    onClick={() => setLoadedPages(p => Math.min(5, p + 1))}
+                    disabled={loadedPages >= 5}
                   >
-                    Load older posts
+                    {loadedPages >= 5 ? "Reached 5 pages" : "Load older posts"}
                   </button>
                 </div>
               )}

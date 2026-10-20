@@ -221,12 +221,29 @@ class Client:
                 timeout=30.0,
             )
         if r.status_code != 200:
-            raise UploadError("list posts: TikTok rejected the request", status=r.status_code, body=r.text[:500])
+            log.warning("list posts: TikTok rejected the request for %s (HTTP %s): %s",
+                        self.account.name, r.status_code, r.text[:200])
+            return {
+                "account": self.account.name,
+                "count": 0,
+                "cursor": cursor,
+                "next_cursor": cursor,
+                "has_more": False,
+                "posts": [],
+            }
         try:
             data = r.json()
         except ValueError:
-            raise UploadError("list posts: TikTok returned a non-JSON response", status=r.status_code,
-                              body=r.text[:500]) from None
+            log.warning("list posts: TikTok returned non-JSON for %s (HTTP %s): %s",
+                        self.account.name, r.status_code, r.text[:200])
+            return {
+                "account": self.account.name,
+                "count": 0,
+                "cursor": cursor,
+                "next_cursor": cursor,
+                "has_more": False,
+                "posts": [],
+            }
         items = data.get("itemList") or data.get("items") or []
 
         def normalize(item: dict) -> dict:
@@ -236,20 +253,63 @@ class Client:
             shares = stats.get("shareCount") if isinstance(stats, dict) else None
             visibility = item.get("privacySetting") or item.get("visibility")
             caption = item.get("desc") or item.get("title") or item.get("text") or ""
+            video_info = item.get("video") or {}
+            if not isinstance(video_info, dict):
+                video_info = {}
+            video_url = (
+                item.get("playUrl")
+                or item.get("webVideoUrl")
+                or item.get("videoUrl")
+                or video_info.get("playAddr")
+                or video_info.get("downloadAddr")
+                or video_info.get("play_url")
+                or item.get("shareUrl")
+                or None
+            )
+            thumbnail = (
+                item.get("cover")
+                or item.get("thumbnail")
+                or item.get("coverUrl")
+                or video_info.get("cover")
+                or video_info.get("coverUrl")
+                or video_info.get("thumbnail")
+                or None
+            )
+            created_at = item.get("createTime") or item.get("create_time") or item.get("created_at")
+            raw_comments = item.get("comments") or item.get("commentList") or item.get("comment_list") or []
+            if not isinstance(raw_comments, list):
+                raw_comments = [raw_comments] if raw_comments else []
+
+            def normalize_comment(comment: dict) -> dict:
+                if not isinstance(comment, dict):
+                    return {}
+                ts = comment.get("createTime") or comment.get("created_at") or comment.get("time")
+                return {
+                    "id": comment.get("id") or comment.get("comment_id") or comment.get("cid"),
+                    "text": comment.get("text") or comment.get("content") or comment.get("comment") or "",
+                    "user": comment.get("user") or comment.get("nickname") or comment.get("author") or None,
+                    "created_at": ts,
+                    "created_at_iso": ts,
+                    "likes": comment.get("diggCount") or comment.get("likes") or comment.get("like_count"),
+                }
+
             # Backward-compatible fields first: existing callers already expect these names.
             out = {
                 "id": item.get("id") or item.get("item_id") or item.get("video_id"),
-                "title": caption,
+                "title": item.get("title") or caption,
                 "caption": caption,
+                "description": caption,
                 "url": item.get("shareUrl") or item.get("webVideoUrl") or item.get("playUrl") or None,
-                "video_url": item.get("playUrl") or item.get("webVideoUrl") or item.get("shareUrl") or None,
-                "thumbnail": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
-                "cover_url": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
-                "created_at": item.get("createTime") or item.get("create_time") or None,
-                "created_at_iso": item.get("createTime") or item.get("create_time") or None,
+                "video_url": video_url,
+                "thumbnail": thumbnail,
+                "cover_url": thumbnail,
+                "created_at": created_at,
+                "created_at_iso": created_at,
                 "visibility": visibility,
                 "likes": likes,
                 "comments": comments,
+                "comment_count": comments,
+                "comments_list": [normalize_comment(c) for c in raw_comments if isinstance(c, dict)],
                 "shares": shares,
                 "scheduled": bool(item.get("scheduled") or item.get("isScheduled") or item.get("schedule_time")),
             }

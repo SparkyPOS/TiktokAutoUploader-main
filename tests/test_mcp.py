@@ -93,6 +93,31 @@ async def test_list_posts(saved_account, monkeypatch):
     assert calls[0][1].endswith("@me")
 
 
+async def test_list_posts_handles_non_json_and_502(saved_account, monkeypatch):
+    class FakeResp:
+        def __init__(self, status, text, json_data=None):
+            self.status_code = status
+            self.text = text
+            self._json_data = json_data
+
+        def json(self):
+            if self._json_data is None:
+                raise ValueError("not json")
+            return self._json_data
+
+    def fake_request(self, session, method, url, what, expect_ok=True, timeout=None, **kwargs):
+        if url.endswith("@me"):
+            return FakeResp(200, '{"user":{"secUid":"s-123"}}', {})
+        return FakeResp(502, "<html>bad gateway</html>")
+
+    monkeypatch.setattr("autotok.uploader.Client._request", fake_request)
+    error, data = await call("list_posts", {"account": "alice", "count": 1})
+    assert not error
+    assert data["account"] == "alice"
+    assert data["count"] == 0
+    assert data["posts"] == []
+
+
 async def test_upload_now(saved_account, video_file, uploads):
     error, data = await call("upload_video", {"account": "alice", "video": "clip.mp4", "caption": "Hello #fyp"})
     assert not error

@@ -227,18 +227,31 @@ class VideoFileInfo(BaseModel):
     modified_at: datetime
 
 
+class CommentInfo(BaseModel):
+    id: Optional[str] = None
+    text: Optional[str] = None
+    user: Optional[str] = None
+    created_at: Optional[int | str] = None
+    created_at_iso: Optional[int | str] = None
+    likes: Optional[int] = None
+
+
 class PostInfo(BaseModel):
     id: Optional[str] = None
     title: Optional[str] = None
     caption: Optional[str] = None
+    description: Optional[str] = None
     url: Optional[str] = None
     video_url: Optional[str] = None
     thumbnail: Optional[str] = None
     cover_url: Optional[str] = None
     created_at: Optional[int | str] = None
+    created_at_iso: Optional[int | str] = None
     visibility: Optional[str | int] = None
     likes: Optional[int] = None
     comments: Optional[int] = None
+    comment_count: Optional[int] = None
+    comments_list: list[CommentInfo] = []
     shares: Optional[int] = None
     scheduled: bool = False
     status: Optional[str] = None
