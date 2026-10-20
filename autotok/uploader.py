@@ -300,7 +300,21 @@ class Client:
                     "accept": "application/json, text/plain, */*",
                 },
             )
+        def empty_result() -> dict:
+            return {
+                "account": self.account.name,
+                "count": 0,
+                "cursor": cursor,
+                "next_cursor": cursor,
+                "has_more": False,
+                "posts": [],
+            }
+
         if r.status_code != 200:
+            if 500 <= r.status_code < 600:
+                log.warning("list posts: TikTok rejected the request for %s (HTTP %s): %s",
+                            self.account.name, r.status_code, r.text[:200])
+                return empty_result()
             log.warning("list posts: TikTok rejected the request for %s (HTTP %s): %s",
                         self.account.name, r.status_code, r.text[:200])
             raise UploadError(
@@ -310,10 +324,10 @@ class Client:
             )
         try:
             data = r.json()
-        except ValueError as exc:
+        except ValueError:
             log.warning("list posts: TikTok returned non-JSON for %s (HTTP %s): %s",
                         self.account.name, r.status_code, r.text[:200])
-            raise UploadError("list posts: TikTok returned an invalid response") from exc
+            return empty_result()
         items = extract_items(data) or []
 
         def normalize(item: dict) -> dict:
