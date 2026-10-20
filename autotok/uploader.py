@@ -281,27 +281,17 @@ class Client:
         if r.status_code != 200:
             log.warning("list posts: TikTok rejected the request for %s (HTTP %s): %s",
                         self.account.name, r.status_code, r.text[:200])
-            return {
-                "account": self.account.name,
-                "count": 0,
-                "cursor": cursor,
-                "next_cursor": cursor,
-                "has_more": False,
-                "posts": [],
-            }
+            raise UploadError(
+                f"list posts: TikTok returned HTTP {r.status_code}: {r.text[:200]}",
+                status=r.status_code,
+                body=r.text[:500],
+            )
         try:
             data = r.json()
-        except ValueError:
+        except ValueError as exc:
             log.warning("list posts: TikTok returned non-JSON for %s (HTTP %s): %s",
                         self.account.name, r.status_code, r.text[:200])
-            return {
-                "account": self.account.name,
-                "count": 0,
-                "cursor": cursor,
-                "next_cursor": cursor,
-                "has_more": False,
-                "posts": [],
-            }
+            raise UploadError("list posts: TikTok returned an invalid response") from exc
         items = extract_items(data) or []
 
         def normalize(item: dict) -> dict:

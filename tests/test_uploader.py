@@ -262,6 +262,24 @@ def test_check_session(client):
 
 
 @responses.activate
+def test_list_posts_reports_tiktok_rejection(client):
+    responses.add(responses.GET, f"{TT}/@me", body='"secUid":"profile-123"')
+    responses.add(responses.GET, f"{TT}/api/post/item_list/", status=403, body="login required")
+
+    with pytest.raises(UploadError, match="TikTok returned HTTP 403"):
+        client.list_posts()
+
+
+@responses.activate
+def test_list_posts_reports_non_json_response(client):
+    responses.add(responses.GET, f"{TT}/@me", body='"secUid":"profile-123"')
+    responses.add(responses.GET, f"{TT}/api/post/item_list/", body="<html>challenge</html>")
+
+    with pytest.raises(UploadError, match="invalid response"):
+        client.list_posts()
+
+
+@responses.activate
 def test_environment_proxy_cannot_override_account_proxy(client, video_file, monkeypatch):
     monkeypatch.setenv("HTTPS_PROXY", "http://corporate.example:3128")
     monkeypatch.setenv("https_proxy", "http://corporate.example:3128")
