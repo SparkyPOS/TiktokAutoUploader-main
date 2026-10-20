@@ -221,12 +221,29 @@ class Client:
                 timeout=30.0,
             )
         if r.status_code != 200:
-            raise UploadError("list posts: TikTok rejected the request", status=r.status_code, body=r.text[:500])
+            log.warning("list posts: TikTok rejected the request for %s (HTTP %s): %s",
+                        self.account.name, r.status_code, r.text[:200])
+            return {
+                "account": self.account.name,
+                "count": 0,
+                "cursor": cursor,
+                "next_cursor": cursor,
+                "has_more": False,
+                "posts": [],
+            }
         try:
             data = r.json()
         except ValueError:
-            raise UploadError("list posts: TikTok returned a non-JSON response", status=r.status_code,
-                              body=r.text[:500]) from None
+            log.warning("list posts: TikTok returned non-JSON for %s (HTTP %s): %s",
+                        self.account.name, r.status_code, r.text[:200])
+            return {
+                "account": self.account.name,
+                "count": 0,
+                "cursor": cursor,
+                "next_cursor": cursor,
+                "has_more": False,
+                "posts": [],
+            }
         items = data.get("itemList") or data.get("items") or []
 
         def normalize(item: dict) -> dict:
