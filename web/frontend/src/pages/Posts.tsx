@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { type PostListResponse } from "../api/client";
 
 function CommentPanel({ post, commentList, formatTimestamp }: {
   post: any;
@@ -46,6 +47,7 @@ export default function PostsPage() {
   const [count, setCount] = useState(20);
   const [cursor, setCursor] = useState(0);
   const [detailed, setDetailed] = useState(false);
+  const [loadedPages, setLoadedPages] = useState(0);
 
   const selectedAccount = useMemo(
     () => accounts.find(a => a.id === selectedId) ?? accounts[0] ?? null,
@@ -53,9 +55,23 @@ export default function PostsPage() {
   );
 
   const query = useQuery({
-    queryKey: ["posts", selectedAccount?.id, count, cursor, detailed],
+    queryKey: ["posts", selectedAccount?.id, count, cursor, detailed, loadedPages],
     enabled: !!selectedAccount,
-    queryFn: () => Posts.listMany(selectedAccount!.id, { count, detailed }, 5),
+    queryFn: async () => {
+      const page = await Posts.list(selectedAccount!.id, { count, cursor, detailed });
+      const extras: PostListResponse[] = [];
+      let nextCursor = page.next_cursor;
+      let pagesLoaded = 0;
+      while (pagesLoaded < Math.max(0, loadedPages) && page.has_more && nextCursor !== undefined && nextCursor !== null && nextCursor !== cursor) {
+        const nextPage = await Posts.list(selectedAccount!.id, { count, cursor: nextCursor, detailed });
+        extras.push(nextPage);
+        nextCursor = nextPage.next_cursor;
+        pagesLoaded += 1;
+        if (!nextPage.has_more || nextPage.next_cursor === undefined || nextPage.next_cursor === null || nextPage.next_cursor === nextCursor) break;
+      }
+      const mergedPosts = [ ...page.posts, ...extras.flatMap(p => p.posts) ];
+      return { ...page, posts: mergedPosts.slice(0, count * (loadedPages + 1)) };
+    },
     retry: false,
   });
 
@@ -108,7 +124,10 @@ export default function PostsPage() {
               <input type="checkbox" checked={detailed} onChange={e => setDetailed(e.target.checked)} />
               Detailed
             </label>
-            <button className="btn-primary" onClick={() => setCursor(0)}>
+            <button className="btn-primary" onClick={() => {
+              setCursor(0);
+              setLoadedPages(0);
+            }}>
               Refresh
             </button>
           </div>
@@ -208,9 +227,10 @@ export default function PostsPage() {
                 <div className="flex justify-end">
                   <button
                     className="btn-secondary"
-                    onClick={() => setCursor(query.data.next_cursor)}
+                    onClick={() => setLoadedPages(p => Math.min(5, p + 1))}
+                    disabled={loadedPages >= 5}
                   >
-                    Load older posts
+                    {loadedPages >= 5 ? "Reached 5 pages" : "Load older posts"}
                   </button>
                 </div>
               )}
