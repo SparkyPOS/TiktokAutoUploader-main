@@ -139,6 +139,7 @@ export default function PostsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>{query.data.posts.length} posts</span>
+                <span>Page {Math.min(loadedPages + 1, 5)} / 5</span>
                 {query.data.has_more && <span>More posts available</span>}
               </div>
 
