@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -259,6 +260,44 @@ def test_check_session(client):
     assert client.check_session() is True
     responses.replace(responses.GET, f"{TT}/api/v1/video/upload/auth/", json={"status_code": 8})
     assert client.check_session() is False
+
+
+@responses.activate
+def test_list_posts_reports_tiktok_rejection(client):
+    responses.add(responses.GET, f"{TT}/@alice", body='"secUid":"profile-123"')
+    responses.add(responses.GET, re.compile(rf"{TT}/api/post/item_list/.*"), status=403, body="login required")
+
+    with pytest.raises(UploadError, match="TikTok returned HTTP 403"):
+        client.list_posts()
+
+
+@responses.activate
+def test_list_posts_reports_non_json_response(client):
+    responses.add(responses.GET, f"{TT}/@alice", body='"secUid":"profile-123"')
+    responses.add(responses.GET, re.compile(rf"{TT}/api/post/item_list/.*"), body="<html>challenge</html>")
+
+    with pytest.raises(UploadError, match="invalid response"):
+        client.list_posts()
+
+
+@responses.activate
+def test_list_posts_uses_account_profile_and_signed_api(client):
+    responses.add(responses.GET, f"{TT}/@alice", body='"secUid":"profile-123"')
+    responses.add(
+        responses.GET,
+        re.compile(rf"{TT}/api/post/item_list/.*"),
+        json={"itemList": [{"id": "video-1", "desc": "my post"}], "cursor": 20, "hasMore": True},
+    )
+
+    result = client.list_posts(count=20)
+
+    assert result["posts"][0]["id"] == "video-1"
+    assert result["posts"][0]["caption"] == "my post"
+    assert result["has_more"] is True
+    assert client._signer.urls[0].startswith(f"{TT}/api/post/item_list/?")
+    assert "secUid=profile-123" in client._signer.urls[0]
+    assert [call.request.url for call in responses.calls][0] == f"{TT}/@alice"
+    assert len(responses.calls) == 2
 
 
 @responses.activate
