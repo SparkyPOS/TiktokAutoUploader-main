@@ -116,23 +116,38 @@ export default function PostsPage() {
                           No video or image
                         </div>
                       )}
-                      <div className="p-4 space-y-2">
+                      <div className="p-4 space-y-3">
                         <div className="text-xs text-slate-500">
                           {post.created_at ? new Date(Number(post.created_at) * 1000 || String(post.created_at)).toLocaleString() : "Unknown date"}
                         </div>
-                        <h3 className="font-medium line-clamp-2">{post.title || description}</h3>
-                        <p className="text-sm text-slate-600 line-clamp-3">{description}</p>
-                        {(detailed || commentCount !== undefined) && (
-                          <div className="text-xs text-slate-500 space-y-1">
-                            {post.visibility !== undefined && <div>Visibility: {String(post.visibility)}</div>}
-                            {post.likes !== undefined && <div>Likes: {post.likes}</div>}
-                            {commentCount !== undefined && <div>Comments: {commentCount}</div>}
-                            {post.shares !== undefined && <div>Shares: {post.shares}</div>}
-                            {post.status && <div>Status: {post.status}</div>}
+                        <h3 className="font-medium text-base line-clamp-2">{post.title || description}</h3>
+
+                        <div className="rounded-md bg-slate-50 p-2.5">
+                          <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">Caption</div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{description}</p>
+                        </div>
+
+                        {(detailed || commentCount !== undefined || post.likes !== undefined || post.shares !== undefined || post.visibility !== undefined) && (
+                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                            {post.likes !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Likes: {post.likes}</div>
+                            )}
+                            {commentCount !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Comments: {commentCount}</div>
+                            )}
+                            {post.shares !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Shares: {post.shares}</div>
+                            )}
+                            {post.visibility !== undefined && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5">Visibility: {String(post.visibility)}</div>
+                            )}
+                            {post.status && (
+                              <div className="rounded bg-slate-100 px-2 py-1.5 col-span-2">Status: {post.status}</div>
+                            )}
                           </div>
                         )}
                         {post.url && (
-                          <a href={post.url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 underline">
+                          <a href={post.url} target="_blank" rel="noreferrer" className="inline-block text-sm text-brand-600 underline">
                             Open post
                           </a>
                         )}
