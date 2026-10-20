@@ -196,6 +196,66 @@ class Client:
         """
         if count <= 0:
             raise ValidationError("count must be positive")
+
+        def resolve_sec_uid(text: str) -> str | None:
+            for pattern in (
+                r'"secUid":"([^"]+)"',
+                r'"sec_uid":"([^"]+)"',
+                r'"secuid":"([^"]+)"',
+                r"secUid\s*:\s*'([^']+)'",
+                r"secUid\s*:\s*\"([^\"]+)\"",
+                r"secUid\s*:\s*([^,\s\}]+)",
+            ):
+                match = re.search(pattern, text)
+                if match:
+                    return match.group(1)
+
+            try:
+                payload = json.loads(text)
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict):
+                for key in ("secUid", "sec_uid", "secuid"):
+                    value = payload.get(key)
+                    if isinstance(value, str) and value:
+                        return value
+
+                def walk(obj):
+                    if isinstance(obj, dict):
+                        for key, value in obj.items():
+                            if key in {"secUid", "sec_uid", "secuid"} and isinstance(value, str) and value:
+                                return value
+                            result = walk(value)
+                            if result is not None:
+                                return result
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            result = walk(item)
+                            if result is not None:
+                                return result
+                    return None
+
+                return walk(payload)
+            return None
+
+        def extract_items(data):
+            if isinstance(data, dict):
+                for key in ("itemList", "items", "postList", "posts"):
+                    value = data.get(key)
+                    if isinstance(value, list):
+                        return value
+                if "data" in data:
+                    nested = extract_items(data["data"])
+                    if nested is not None:
+                        return nested
+                if "body" in data:
+                    nested = extract_items(data["body"])
+                    if nested is not None:
+                        return nested
+            elif isinstance(data, list):
+                return data
+            return None
+
         with self._session() as s:
             profile = self._request(
                 s,
@@ -207,9 +267,7 @@ class Client:
             )
             sec_uid = None
             if profile.status_code == 200:
-                match = re.search(r'"secUid":"([^"]+)"', profile.text)
-                if match:
-                    sec_uid = match.group(1)
+                sec_uid = resolve_sec_uid(profile.text)
             if not sec_uid:
                 raise NotLoggedInError("could not resolve the current user's TikTok profile; log in again")
             r = self._request(
@@ -244,7 +302,7 @@ class Client:
                 "has_more": False,
                 "posts": [],
             }
-        items = data.get("itemList") or data.get("items") or []
+        items = extract_items(data) or []
 
         def normalize(item: dict) -> dict:
             stats = item.get("stats") or item.get("statistics") or {}
