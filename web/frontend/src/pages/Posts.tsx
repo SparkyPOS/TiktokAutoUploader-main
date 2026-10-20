@@ -1,4 +1,39 @@
 import { useMemo, useState } from "react";
+
+function CommentPanel({ post, commentList, formatTimestamp }: {
+  post: any;
+  commentList: any[];
+  formatTimestamp: (value: number | string | null | undefined) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Comments</span>
+        <span className="text-xs text-slate-500">{open ? "Hide" : `Show (${commentList.length})`}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {commentList.length === 0 ? (
+            <div className="text-xs text-slate-500">No comments returned by TikTok for this post.</div>
+          ) : (
+            commentList.map((comment, index) => (
+              <div key={`${post.id ?? "post"}-comment-${comment.id ?? index}`} className="rounded bg-white p-2">
+                <div className="text-[10px] text-slate-500 mb-1">{formatTimestamp(comment.created_at)}</div>
+                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words">{comment.text || "(empty comment)"}</div>
+                {comment.user && <div className="text-[10px] text-slate-500 mt-1">By {comment.user}</div>}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 import { useQuery } from "@tanstack/react-query";
 import { Accounts, Posts, errorMessage } from "../api/client";
 
@@ -155,18 +190,7 @@ export default function PostsPage() {
                         )}
 
                         {commentList.length > 0 && (
-                          <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5">
-                            <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-2">Comments</div>
-                            <div className="space-y-2">
-                              {commentList.map((comment, index) => (
-                                <div key={`${post.id ?? "post"}-comment-${comment.id ?? index}`} className="rounded bg-white p-2">
-                                  <div className="text-[10px] text-slate-500 mb-1">{formatTimestamp(comment.created_at)}</div>
-                                  <div className="text-sm text-slate-700 whitespace-pre-wrap break-words">{comment.text || "(empty comment)"}</div>
-                                  {comment.user && <div className="text-[10px] text-slate-500 mt-1">By {comment.user}</div>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                          <CommentPanel post={post} commentList={commentList} formatTimestamp={formatTimestamp} />
                         )}
 
                         {post.url && (
