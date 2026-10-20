@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
+from urllib.parse import urlencode
 
 import requests
 from requests_auth_aws_sigv4 import AWSSigV4
@@ -260,23 +261,44 @@ class Client:
             profile = self._request(
                 s,
                 "GET",
-                "https://www.tiktok.com/@me",
-                "current user profile",
+                f"https://www.tiktok.com/@{self.account.name.lstrip('@')}",
+                "account profile",
                 expect_ok=False,
                 timeout=30.0,
+                headers={"user-agent": self.user_agent},
             )
             sec_uid = None
             if profile.status_code == 200:
                 sec_uid = resolve_sec_uid(profile.text)
             if not sec_uid:
                 raise NotLoggedInError("could not resolve the current user's TikTok profile; log in again")
+            base = "https://www.tiktok.com/api/post/item_list/"
+            query = urlencode({
+                "aid": AID,
+                "app_name": "tiktok_web",
+                "device_platform": "web",
+                "count": count,
+                "cursor": cursor,
+                "secUid": sec_uid,
+            })
+            request_url = f"{base}?{query}"
+            if self._signer is not None:
+                signature = self._signer.sign(request_url)
+            else:
+                with Signer(self.user_agent, proxy=self.proxy, timeout=self.timeout) as signer:
+                    signature = signer.sign(request_url)
             r = self._request(
                 s,
                 "GET",
-                f"https://www.tiktok.com/api/post/item_list/?secUid={sec_uid}&count={count}&cursor={cursor}",
+                signature.signed_url,
                 "list posts",
                 expect_ok=False,
                 timeout=30.0,
+                headers={
+                    "user-agent": self.user_agent,
+                    "referer": f"https://www.tiktok.com/@{self.account.name.lstrip('@')}",
+                    "accept": "application/json, text/plain, */*",
+                },
             )
         if r.status_code != 200:
             log.warning("list posts: TikTok rejected the request for %s (HTTP %s): %s",
