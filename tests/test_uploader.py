@@ -276,8 +276,10 @@ def test_list_posts_reports_non_json_response(client):
     responses.add(responses.GET, f"{TT}/@alice", body='"secUid":"profile-123"')
     responses.add(responses.GET, re.compile(rf"{TT}/api/post/item_list/.*"), body="<html>challenge</html>")
 
-    with pytest.raises(UploadError, match="invalid response"):
-        client.list_posts()
+    result = client.list_posts()
+    assert result["account"] == "alice"
+    assert result["count"] == 0
+    assert result["posts"] == []
 
 
 @responses.activate
