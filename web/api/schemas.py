@@ -231,6 +231,7 @@ class PostInfo(BaseModel):
     id: Optional[str] = None
     title: Optional[str] = None
     caption: Optional[str] = None
+    description: Optional[str] = None
     url: Optional[str] = None
     video_url: Optional[str] = None
     thumbnail: Optional[str] = None
@@ -239,6 +240,7 @@ class PostInfo(BaseModel):
     visibility: Optional[str | int] = None
     likes: Optional[int] = None
     comments: Optional[int] = None
+    comment_count: Optional[int] = None
     shares: Optional[int] = None
     scheduled: bool = False
     status: Optional[str] = None

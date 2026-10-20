@@ -253,20 +253,44 @@ class Client:
             shares = stats.get("shareCount") if isinstance(stats, dict) else None
             visibility = item.get("privacySetting") or item.get("visibility")
             caption = item.get("desc") or item.get("title") or item.get("text") or ""
+            video_info = item.get("video") or {}
+            if not isinstance(video_info, dict):
+                video_info = {}
+            video_url = (
+                item.get("playUrl")
+                or item.get("webVideoUrl")
+                or item.get("videoUrl")
+                or video_info.get("playAddr")
+                or video_info.get("downloadAddr")
+                or video_info.get("play_url")
+                or item.get("shareUrl")
+                or None
+            )
+            thumbnail = (
+                item.get("cover")
+                or item.get("thumbnail")
+                or item.get("coverUrl")
+                or video_info.get("cover")
+                or video_info.get("coverUrl")
+                or video_info.get("thumbnail")
+                or None
+            )
             # Backward-compatible fields first: existing callers already expect these names.
             out = {
                 "id": item.get("id") or item.get("item_id") or item.get("video_id"),
-                "title": caption,
+                "title": item.get("title") or caption,
                 "caption": caption,
+                "description": caption,
                 "url": item.get("shareUrl") or item.get("webVideoUrl") or item.get("playUrl") or None,
-                "video_url": item.get("playUrl") or item.get("webVideoUrl") or item.get("shareUrl") or None,
-                "thumbnail": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
-                "cover_url": item.get("cover") or item.get("thumbnail") or item.get("coverUrl") or None,
+                "video_url": video_url,
+                "thumbnail": thumbnail,
+                "cover_url": thumbnail,
                 "created_at": item.get("createTime") or item.get("create_time") or None,
                 "created_at_iso": item.get("createTime") or item.get("create_time") or None,
                 "visibility": visibility,
                 "likes": likes,
                 "comments": comments,
+                "comment_count": comments,
                 "shares": shares,
                 "scheduled": bool(item.get("scheduled") or item.get("isScheduled") or item.get("schedule_time")),
             }

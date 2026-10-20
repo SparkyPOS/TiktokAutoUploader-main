@@ -59,6 +59,7 @@ export interface Post {
   id?: string | null;
   title?: string | null;
   caption?: string | null;
+  description?: string | null;
   url?: string | null;
   video_url?: string | null;
   thumbnail?: string | null;
@@ -67,6 +68,7 @@ export interface Post {
   visibility?: string | number | null;
   likes?: number | null;
   comments?: number | null;
+  comment_count?: number | null;
   shares?: number | null;
   scheduled?: boolean;
   status?: string | null;

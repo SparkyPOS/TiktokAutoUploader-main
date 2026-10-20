@@ -93,44 +93,53 @@ export default function PostsPage() {
               )}
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {query.data.posts.map(post => (
-                  <article key={String(post.id ?? `${post.title ?? "post"}-${post.created_at}`)} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-                    {post.cover_url || post.thumbnail ? (
-                      <img
-                        src={post.cover_url || post.thumbnail || undefined}
-                        alt={post.caption || post.title || "Post thumbnail"}
-                        className="h-48 w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-48 w-full bg-slate-100 flex items-center justify-center text-slate-400">
-                        No image
-                      </div>
-                    )}
-                    <div className="p-4 space-y-2">
-                      <div className="text-xs text-slate-500">
-                        {post.created_at ? new Date(Number(post.created_at) * 1000 || String(post.created_at)).toLocaleString() : "Unknown date"}
-                      </div>
-                      <h3 className="font-medium line-clamp-2">{post.title || post.caption || "Untitled post"}</h3>
-                      {post.caption && post.caption !== post.title && (
-                        <p className="text-sm text-slate-600 line-clamp-3">{post.caption}</p>
-                      )}
-                      {detailed && (
-                        <div className="text-xs text-slate-500 space-y-1">
-                          {post.visibility !== undefined && <div>Visibility: {String(post.visibility)}</div>}
-                          {post.likes !== undefined && <div>Likes: {post.likes}</div>}
-                          {post.comments !== undefined && <div>Comments: {post.comments}</div>}
-                          {post.shares !== undefined && <div>Shares: {post.shares}</div>}
-                          {post.status && <div>Status: {post.status}</div>}
+                {query.data.posts.map(post => {
+                  const description = post.description || post.caption || post.title || "No description";
+                  const commentCount = post.comment_count ?? post.comments ?? undefined;
+                  return (
+                    <article key={String(post.id ?? `${post.title ?? "post"}-${post.created_at}`)} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                      {post.video_url ? (
+                        <video
+                          src={post.video_url}
+                          controls
+                          preload="metadata"
+                          className="h-48 w-full object-cover bg-slate-100"
+                        />
+                      ) : post.cover_url || post.thumbnail ? (
+                        <img
+                          src={post.cover_url || post.thumbnail || undefined}
+                          alt={description}
+                          className="h-48 w-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-48 w-full bg-slate-100 flex items-center justify-center text-slate-400">
+                          No video or image
                         </div>
                       )}
-                      {post.url && (
-                        <a href={post.url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 underline">
-                          Open post
-                        </a>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                      <div className="p-4 space-y-2">
+                        <div className="text-xs text-slate-500">
+                          {post.created_at ? new Date(Number(post.created_at) * 1000 || String(post.created_at)).toLocaleString() : "Unknown date"}
+                        </div>
+                        <h3 className="font-medium line-clamp-2">{post.title || description}</h3>
+                        <p className="text-sm text-slate-600 line-clamp-3">{description}</p>
+                        {(detailed || commentCount !== undefined) && (
+                          <div className="text-xs text-slate-500 space-y-1">
+                            {post.visibility !== undefined && <div>Visibility: {String(post.visibility)}</div>}
+                            {post.likes !== undefined && <div>Likes: {post.likes}</div>}
+                            {commentCount !== undefined && <div>Comments: {commentCount}</div>}
+                            {post.shares !== undefined && <div>Shares: {post.shares}</div>}
+                            {post.status && <div>Status: {post.status}</div>}
+                          </div>
+                        )}
+                        {post.url && (
+                          <a href={post.url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 underline">
+                            Open post
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
 
               {query.data.has_more && (
