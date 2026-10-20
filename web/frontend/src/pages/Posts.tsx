@@ -55,7 +55,7 @@ export default function PostsPage() {
   const query = useQuery({
     queryKey: ["posts", selectedAccount?.id, count, cursor, detailed],
     enabled: !!selectedAccount,
-    queryFn: () => Posts.list(selectedAccount!.id, { count, cursor, detailed }),
+    queryFn: () => Posts.listMany(selectedAccount!.id, { count, detailed }, 5),
     retry: false,
   });
 
